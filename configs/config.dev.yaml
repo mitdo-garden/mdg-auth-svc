@@ -1,0 +1,31 @@
+# Deltas on config.yaml (APP_ENV=dev).
+app:
+  env: dev
+
+server:
+  port: "${SERVER_PORT:8080}"
+
+mysql:
+  host: ${MYSQL_HOST:gateway01.ap-southeast-1.prod.aws.tidbcloud.com}
+  port: "${MYSQL_PORT:3306}"
+  params: "${MYSQL_PARAMS:parseTime=true&loc=UTC&tls=true}"
+  user: ${MYSQL_USER:3Gkv9nJJJ1CuB2R.root}
+  password: "${MYSQL_PASSWORD:StLjClL3uRDdv7PF}"
+
+google:
+  callback_url: ${GOOGLE_CALLBACK_URL:http://mitdo.tech:8080/v1/auth/google/callback}
+
+github:
+  callback_url: ${GITHUB_CALLBACK_URL:http://mitdo.tech:8080/v1/auth/github/callback}
+
+jwt:
+  access_ttl_seconds: 60
+
+vault:
+  address: ${VAULT_ADDR:http://127.0.0.1:8200}
+
+frontend:
+  url: ${FRONTEND_URL:http://mitdo.tech:5173}
+
+cookie:
+  domain: ${COOKIE_DOMAIN:mitdo.tech}

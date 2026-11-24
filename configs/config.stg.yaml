@@ -1,0 +1,9 @@
+# Deltas on config.yaml (APP_ENV=stg).
+app:
+  env: stg
+
+server:
+  port: "${SERVER_PORT:8080}"
+
+cookie:
+  secure: true

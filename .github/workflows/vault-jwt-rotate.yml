@@ -1,0 +1,45 @@
+# Scheduled / manual Transit key rotation per environment.
+# Configure repository secrets: VAULT_ADDR_<ENV>, VAULT_ROTATOR_ROLE_ID_<ENV>, VAULT_ROTATOR_SECRET_ID_<ENV>
+name: vault-jwt-rotate
+
+on:
+  schedule:
+    - cron: "0 6 1 * *" # monthly
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "dev | staging | prod"
+        required: true
+        default: "staging"
+        type: choice
+        options: [dev, staging, prod]
+
+jobs:
+  rotate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.environment)) || fromJSON('["dev","staging","prod"]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Vault CLI
+        run: |
+          curl -fsSL https://releases.hashicorp.com/vault/1.17.6/vault_1.17.6_linux_amd64.zip -o vault.zip
+          sudo unzip -o vault.zip -d /usr/local/bin
+          vault version
+      - name: Rotate Transit key
+        env:
+          ENVIRONMENT: ${{ matrix.environment }}
+        run: |
+          set -euo pipefail
+          upper=$(echo "$ENVIRONMENT" | tr '[:lower:]' '[:upper:]')
+          addr_var="VAULT_ADDR_${upper}"
+          role_var="VAULT_ROTATOR_ROLE_ID_${upper}"
+          secret_var="VAULT_ROTATOR_SECRET_ID_${upper}"
+          export VAULT_ADDR="${!addr_var:?missing $addr_var}"
+          export VAULT_ROLE_ID="${!role_var:?missing $role_var}"
+          export VAULT_SECRET_ID="${!secret_var:?missing $secret_var}"
+          export VAULT_TRANSIT_KEY=jwt-access
+          chmod +x deploy/vault/rotate.sh
+          deploy/vault/rotate.sh

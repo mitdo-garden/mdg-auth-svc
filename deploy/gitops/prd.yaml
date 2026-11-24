@@ -1,0 +1,27 @@
+# Owned by mdg-auth-svc. Ship in mdg-infra-platform reads this file (--env prd).
+# image / replicas are set by CI after push to ECR. Keep replicas 0 until image is set.
+name: auth
+image: ""
+replicas: 0
+cpu: 512
+memory: 1024
+port: 8080
+health:
+  path: /healthz
+identity: auth
+secret_id: mdg-auth/prd
+kms_alias: alias/mdg-auth-jwt-prd
+ecr_repository: mdg-auth-svc
+database: mdg_auth
+env:
+  APP_ENV: prd
+  JWT_SIGNER: kms
+  KMS_SECRETS_ID: mdg-auth/prd
+  KMS_KEY_ID: alias/mdg-auth-jwt-prd
+  FRONTEND_URL: https://app.example
+  GOOGLE_CALLBACK_URL: https://api.example/v1/auth/google/callback
+  GITHUB_CALLBACK_URL: https://api.example/v1/auth/github/callback
+routes:
+  - "ANY /.well-known/jwks.json"
+  - "ANY /v1/auth/{proxy+}"
+  - "ANY /v1/me"

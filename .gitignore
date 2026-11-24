@@ -1,0 +1,22 @@
+.env
+.env.*
+!.env.example
+bin/
+dist/
+*.exe
+*.test
+coverage.out
+.DS_Store
+
+# Local Vault AppRole credentials + app secrets seed from make vault / run-*.
+deploy/vault/.dev-creds
+deploy/vault/.app-secrets.env
+deploy/vault/.terraform/
+deploy/vault/*.tfstate*
+deploy/vault/.terraform.lock.hcl
+
+# LocalStack KMS + Secrets Manager creds from make aws / JWT_SIGNER=kms make run-*.
+deploy/aws/.dev-creds
+
+# Test deploy overrides (keep .env.example).
+deploy/test/.env

@@ -1,0 +1,21 @@
+# Local AWS KMS + Secrets Manager via LocalStack (dev only).
+# Pin 4.14.0 = last community image that starts without LOCALSTACK_AUTH_TOKEN.
+# For newer/stable images: set LOCALSTACK_AUTH_TOKEN (Hobby plan is free) in the env.
+#   docker compose -f deploy/aws/docker-compose.yml up -d
+services:
+  localstack:
+    image: localstack/localstack:4.14.0
+    container_name: mdg-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: kms,secretsmanager
+      DEBUG: "0"
+      AWS_DEFAULT_REGION: us-east-1
+      # Optional — only needed for LocalStack >= 2026.03 / :stable
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:-}
+    volumes:
+      - localstack_data:/var/lib/localstack
+
+volumes:
+  localstack_data:

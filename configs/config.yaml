@@ -1,0 +1,72 @@
+# Shared defaults. Profiles merge like Spring:
+#   config.yaml → config.<APP_ENV>.yaml → config.<profile>.yaml (from app.profiles / APP_PROFILES)
+# Overlay files should only list deltas.
+#
+# Placeholders:
+#   ${NAME}            → env or empty
+#   ${NAME:default}    → env or default (first ':' only; defaults may contain ':')
+#   ${A:${B:fallback}} → nested
+# OAuth client secrets / session_secret still come from Vault KV or Secrets Manager
+# unless set here via ${GOOGLE_CLIENT_ID:} etc.
+
+app:
+  name: ${APP_NAME:mdg-auth-svc}
+  # Optional extra overlays after APP_ENV, e.g. [aws] → configs/config.aws.yaml
+  profiles: []
+
+server:
+  port: "${SERVER_PORT:5000}"
+
+mysql:
+  host: ${MYSQL_HOST:}
+  port: "${MYSQL_PORT:3306}"
+  user: ${MYSQL_USER:}
+  password: "${MYSQL_PASSWORD:}"
+  database: ${MYSQL_DATABASE:mdg_auth}
+  params: ${MYSQL_PARAMS:parseTime=true&loc=UTC}
+  dsn: "${MYSQL_DSN:}"
+
+google:
+  client_id: "${GOOGLE_CLIENT_ID:}"
+  client_secret: "${GOOGLE_CLIENT_SECRET:}"
+  callback_url: "${GOOGLE_CALLBACK_URL:}"
+
+github:
+  client_id: "${GITHUB_CLIENT_ID:}"
+  client_secret: "${GITHUB_CLIENT_SECRET:}"
+  callback_url: "${GITHUB_CALLBACK_URL:}"
+
+security:
+  session_secret: "${SESSION_SECRET:}"
+
+jwt:
+  signer: ${JWT_SIGNER:kms}
+  issuer: ${JWT_ISSUER:mdg-auth-svc}
+  access_ttl_seconds: 900
+  refresh_ttl_seconds: 1209600
+  reload_interval_seconds: 30
+
+vault:
+  address: ${VAULT_ADDR:}
+  transit_key: ${VAULT_TRANSIT_KEY:jwt-access}
+  secrets_path: "${VAULT_SECRETS_PATH:}"
+  role_id: "${VAULT_ROLE_ID:}"
+  secret_id: "${VAULT_SECRET_ID:}"
+  token: "${VAULT_TOKEN:}"
+  namespace: "${VAULT_NAMESPACE:}"
+
+kms:
+  region: "${KMS_REGION:${AWS_REGION:${AWS_DEFAULT_REGION:}}}"
+  key_id: "${KMS_KEY_ID:}"
+  kid: ${KMS_KID:kms-1}
+  secrets_id: "${KMS_SECRETS_ID:${AWS_SECRETS_MANAGER_SECRET_ID:}}"
+  endpoint: "${KMS_ENDPOINT:${AWS_ENDPOINT_URL:}}"
+
+frontend:
+  url: ${FRONTEND_URL:}
+
+cookie:
+  name: ${COOKIE_NAME:mitdo_session}
+  refresh_name: ${COOKIE_REFRESH_NAME:mitdo_refresh}
+  secure: false
+  domain: "${COOKIE_DOMAIN:}"
