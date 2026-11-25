@@ -1,4 +1,4 @@
-name: deploy production EC2
+name: deploy production ECR
 
 on:
   push:
@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   deploy:
-    name: Build and deploy directly on EC2
+    name: Build, push, and deploy
     runs-on: ubuntu-latest
     environment:
       name: mitdo-cloud-auth-svc-prd
@@ -31,35 +31,15 @@ jobs:
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
           AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
           EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
         run: |
           set -euo pipefail
           test -n "$AWS_REGION" || (echo "Missing GitHub environment variable: AWS_REGION" >&2; exit 1)
           test -n "$AWS_ROLE_ARN" || (echo "Missing GitHub environment variable: AWS_ROLE_ARN" >&2; exit 1)
+          test -n "$ECR_REPOSITORY" || (echo "Missing GitHub environment variable: ECR_REPOSITORY" >&2; exit 1)
           test -n "$EC2_INSTANCE_ID" || (echo "Missing GitHub environment variable: EC2_INSTANCE_ID" >&2; exit 1)
 
-      - name: Show OIDC subject for AWS assume-role debugging
-        env:
-          OIDC_AUDIENCE: sts.amazonaws.com
-        run: |
-          set -euo pipefail
-          token=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$OIDC_AUDIENCE")
-          id_token=$(printf '%s' "$token" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')
-          python3 - "$id_token" <<'PY'
-          import base64
-          import json
-          import sys
-
-          parts = sys.argv[1].split(".")
-          payload = parts[1] + "=" * (-len(parts[1]) % 4)
-          claims = json.loads(base64.urlsafe_b64decode(payload))
-          print(f"GitHub OIDC sub: {claims.get('sub', '')}")
-          print(f"GitHub OIDC aud: {claims.get('aud', '')}")
-          print(f"GitHub OIDC repository: {claims.get('repository', '')}")
-          print(f"GitHub OIDC environment: {claims.get('environment', '')}")
-          print(f"GitHub OIDC branch/ref: {claims.get('ref', '')}")
-          PY
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v5
         with:
@@ -70,11 +50,30 @@ jobs:
       - name: Verify AWS identity
         run: aws sts get-caller-identity
 
-      - name: Deploy and run Go binary on EC2
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
         env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 || \
+            aws ecr create-repository --repository-name "$ECR_REPOSITORY" >/dev/null
+          docker build --tag "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" --tag "$ECR_REGISTRY/$ECR_REPOSITORY:latest" .
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+      - name: Deploy Docker image on EC2 through SSM
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
           EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
-          SOURCE_REPOSITORY: ${{ github.repository }}
-          SOURCE_SHA: ${{ github.sha }}
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
 
@@ -82,46 +81,31 @@ jobs:
           import json
           import os
 
-          repository = os.environ["SOURCE_REPOSITORY"]
-          sha = os.environ["SOURCE_SHA"]
-          archive_url = f"https://api.github.com/repos/{repository}/tarball/{sha}"
-
+          image = f"{os.environ['ECR_REGISTRY']}/{os.environ['ECR_REPOSITORY']}:{os.environ['IMAGE_TAG']}"
           commands = [
               "set -euo pipefail",
-              f"echo 'Deploying mdg-auth-svc commit: {sha}'",
-              "echo 'Checking EC2 environment file: /etc/mdg-auth-svc.env'",
+              f"echo 'Deploying mdg-auth-svc image: {image}'",
               "if [ ! -f /etc/mdg-auth-svc.env ]; then echo 'ERROR: /etc/mdg-auth-svc.env does not exist on EC2' >&2; exit 1; fi",
               "chmod 600 /etc/mdg-auth-svc.env",
+              "command -v docker >/dev/null || (echo 'ERROR: Docker is not installed' >&2; exit 1)",
               "command -v curl >/dev/null || (echo 'ERROR: curl is not installed' >&2; exit 1)",
-              "command -v go >/dev/null || { apt-get update -y; apt-get install -y ca-certificates curl tar; GO_VERSION=1.27.3; GO_ARCH=$(uname -m); case \"$GO_ARCH\" in x86_64) GO_ARCH=amd64 ;; aarch64|arm64) GO_ARCH=arm64 ;; *) echo \"ERROR: unsupported architecture: $GO_ARCH\" >&2; exit 1 ;; esac; curl -fsSL \"https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz\" -o /tmp/go.tar.gz; rm -rf /usr/local/go; tar -C /usr/local -xzf /tmp/go.tar.gz; rm -f /tmp/go.tar.gz; }",
-              "export PATH=/usr/local/go/bin:$PATH",
-              "export HOME=/root",
-              "export GOPATH=/root/go",
-              "export GOMODCACHE=/root/go/pkg/mod",
-              "export GOCACHE=/root/.cache/go-build",
-              "mkdir -p /root/go /root/go/pkg/mod /root/.cache/go-build",
-              "command -v go >/dev/null || (echo 'ERROR: Go installation failed' >&2; exit 1)",
-              "command -v systemctl >/dev/null || (echo 'ERROR: systemd is not available' >&2; exit 1)",
-              "mkdir -p /var/lib/mdg-auth-svc/releases /opt/mdg-auth-svc",
-              f"RELEASE_DIR=/var/lib/mdg-auth-svc/releases/{sha}",
-              "rm -rf \"$RELEASE_DIR\"",
-              "mkdir -p \"$RELEASE_DIR/source\"",
-              f"curl -fsSL '{archive_url}' -o \"$RELEASE_DIR/source.tar.gz\"",
-              "tar -xzf \"$RELEASE_DIR/source.tar.gz\" -C \"$RELEASE_DIR/source\" --strip-components=1",
-              "cd \"$RELEASE_DIR/source\"",
-              "GOTOOLCHAIN=auto go build -trimpath -ldflags='-s -w' -o \"$RELEASE_DIR/mdg-auth-svc\" ./cmd/server",
-              "install -m 0755 \"$RELEASE_DIR/mdg-auth-svc\" /opt/mdg-auth-svc/mdg-auth-svc",
-              "rm -rf /opt/mdg-auth-svc/configs",
-              "cp -a \"$RELEASE_DIR/source/configs\" /opt/mdg-auth-svc/configs",
-              "chmod 0644 /opt/mdg-auth-svc/configs/*.yaml",
-              "printf '%s\\n' '[Unit]' 'Description=Mitdo Garden Auth Service' 'After=network-online.target' 'Wants=network-online.target' '' '[Service]' 'Type=simple' 'WorkingDirectory=/opt/mdg-auth-svc' 'EnvironmentFile=/etc/mdg-auth-svc.env' 'ExecStart=/opt/mdg-auth-svc/mdg-auth-svc' 'Restart=always' 'RestartSec=3' 'User=root' 'NoNewPrivileges=true' '' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/mdg-auth-svc.service",
+              "aws ecr get-login-password --region '" + os.environ["AWS_REGION"] + "' | docker login --username AWS --password-stdin '" + os.environ["ECR_REGISTRY"] + "'",
+              f"docker pull '{image}'",
+              f"docker image inspect '{image}' --format 'digest={{json .RepoDigests}} size={{.Size}}'",
+              "mkdir -p /var/lib/mdg-auth-svc",
+              "docker rm -f mdg-auth-svc 2>/dev/null || true",
+              f"docker run -d --name mdg-auth-svc --restart unless-stopped -p 8080:8080 --env-file /etc/mdg-auth-svc.env -v /var/lib/mdg-auth-svc:/app/data '{image}'",
+              "printf '%s\\n' '[Unit]' 'Description=Mitdo Garden Auth Service' 'After=network-online.target docker.service' 'Requires=docker.service' '' '[Service]' 'Restart=always' 'ExecStart=/usr/bin/docker start -a mdg-auth-svc' 'ExecStop=/usr/bin/docker stop mdg-auth-svc' '' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/mdg-auth-svc.service",
               "systemctl daemon-reload",
               "systemctl enable mdg-auth-svc",
               "systemctl restart mdg-auth-svc",
-              "for i in $(seq 1 30); do echo \"Health check attempt $i/30\"; if curl -v -fsS http://127.0.0.1:8080/healthz; then echo 'Health check passed'; exit 0; fi; echo 'Health check failed; service logs:'; journalctl -u mdg-auth-svc -n 50 --no-pager; sleep 2; done",
+              "docker ps -a --filter name=^/mdg-auth-svc$ --format 'table {{.Names}}\\t{{.Status}}\\t{{.Image}}\\t{{.Ports}}'",
+              "docker inspect mdg-auth-svc --format 'container_id={{.Id}} image={{.Config.Image}} status={{.State.Status}} exit_code={{.State.ExitCode}} restart_count={{.RestartCount}}'",
+              "for i in $(seq 1 30); do echo \"Health check attempt $i/30\"; if curl -v -fsS http://127.0.0.1:8080/healthz; then echo 'Health check passed'; exit 0; fi; echo 'Health check failed; container logs:'; docker logs --tail 50 mdg-auth-svc 2>&1 || true; sleep 2; done",
               "echo 'Health check timed out after 30 attempts' >&2",
-              "systemctl status mdg-auth-svc --no-pager",
-              "journalctl -u mdg-auth-svc -n 100 --no-pager",
+              "docker ps -a --filter name=^/mdg-auth-svc$",
+              "docker inspect mdg-auth-svc --format 'status={{.State.Status}} exit_code={{.State.ExitCode}} error={{.State.Error}} restart_count={{.RestartCount}}'",
+              "docker logs --tail 100 mdg-auth-svc 2>&1 || true",
               "exit 1",
           ]
           print(json.dumps({"commands": commands}))
@@ -131,7 +115,7 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$EC2_INSTANCE_ID" \
             --document-name AWS-RunShellScript \
-            --comment "Deploy mdg-auth-svc $SOURCE_SHA to EC2" \
+            --comment "Deploy mdg-auth-svc ${IMAGE_TAG} to EC2" \
             --parameters "$PARAMETERS" \
             --query 'Command.CommandId' \
             --output text)
