@@ -11,7 +11,7 @@ import (
 	"github.com/mitdo-garden/mdg-auth-svc/internal/config"
 )
 
-// LoadAppSecrets reads OAuth + session_secret JSON from AWS Secrets Manager into cfg.
+// LoadAppSecrets reads OAuth, session_secret, and optional MySQL fields from AWS Secrets Manager.
 // Skips when SecretsID is empty (caller may rely on env overrides only).
 func LoadAppSecrets(ctx context.Context, cfg *config.Config) error {
 	id := cfg.KMS.SecretsID

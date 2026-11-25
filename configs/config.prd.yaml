@@ -5,5 +5,17 @@ app:
 server:
   port: "${SERVER_PORT:8080}"
 
+google:
+  callback_url: ${GOOGLE_CALLBACK_URL:http://mitdo.cloud:8080/v1/auth/google/callback}
+
+github:
+  callback_url: ${GITHUB_CALLBACK_URL:http://mitdo.cloud:8080/v1/auth/github/callback}
+
+jwt:
+  access_ttl_seconds: 600
+
+frontend:
+  url: ${FRONTEND_URL:https://mitdo.cloud}
+
 cookie:
-  secure: true
+  domain: ${COOKIE_DOMAIN:mitdo.cloud}

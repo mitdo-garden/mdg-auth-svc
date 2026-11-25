@@ -167,3 +167,19 @@ func TestDatabaseNamePlaceholderStyle(t *testing.T) {
 		t.Fatalf("dsn=%s", cfg.MySQLDSN)
 	}
 }
+
+func TestApplyAppSecretsMySQL(t *testing.T) {
+	cfg := &Config{}
+	cfg.ApplyAppSecrets(map[string]string{
+		"mysql_host":     "mysql.internal",
+		"mysql_port":     "3306",
+		"mysql_user":     "auth_app",
+		"mysql_password": "p@ssword",
+		"mysql_database": "mdg_auth",
+		"mysql_params":   "parseTime=true&loc=UTC&tls=true",
+	})
+
+	if !strings.Contains(cfg.MySQLDSN, "@tcp(mysql.internal:3306)/mdg_auth?") {
+		t.Fatalf("dsn=%s", cfg.MySQLDSN)
+	}
+}

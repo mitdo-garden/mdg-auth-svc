@@ -1,9 +1,13 @@
 package config
 
-import "strings"
+import (
+	"fmt"
+	"net/url"
+	"strings"
+)
 
-// ApplyAppSecrets fills empty OAuth + session fields from a string map
-// (Vault KV or AWS Secrets Manager JSON). Existing non-empty values win.
+// ApplyAppSecrets fills OAuth, session, and MySQL fields from a string map
+// (Vault KV or AWS Secrets Manager JSON). Existing environment/YAML values win.
 func (c *Config) ApplyAppSecrets(data map[string]string) {
 	if len(data) == 0 {
 		return
@@ -23,6 +27,29 @@ func (c *Config) ApplyAppSecrets(data map[string]string) {
 	if len(c.SessionSecret) == 0 {
 		if v := strings.TrimSpace(data["session_secret"]); v != "" {
 			c.SessionSecret = []byte(v)
+		}
+	}
+
+	if strings.TrimSpace(c.MySQLDSN) == "" {
+		if dsn := strings.TrimSpace(data["mysql_dsn"]); dsn != "" {
+			c.MySQLDSN = dsn
+		} else {
+			host := strings.TrimSpace(data["mysql_host"])
+			port := strings.TrimSpace(data["mysql_port"])
+			user := strings.TrimSpace(data["mysql_user"])
+			password := strings.TrimSpace(data["mysql_password"])
+			database := strings.TrimSpace(data["mysql_database"])
+			params := strings.TrimSpace(data["mysql_params"])
+			if port == "" {
+				port = "3306"
+			}
+			if params == "" {
+				params = "parseTime=true&loc=UTC"
+			}
+			if host != "" && user != "" && database != "" {
+				c.MySQLDSN = fmt.Sprintf("%s@tcp(%s:%s)/%s?%s",
+					url.UserPassword(user, password).String(), host, port, database, params)
+			}
 		}
 	}
 }

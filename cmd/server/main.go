@@ -78,6 +78,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := cfg.ValidateMySQL(); err != nil {
+		logger.Error("mysql config invalid", "err", err)
+		os.Exit(1)
+	}
+
 	gdb, err := db.Connect(cfg.MySQLDSN)
 	if err != nil {
 		logger.Error("database connect failed", "err", err)

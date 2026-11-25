@@ -196,9 +196,6 @@ func mysqlDSN(v *viper.Viper) string {
 }
 
 func (c *Config) validateBoot() error {
-	if strings.TrimSpace(c.MySQLDSN) == "" {
-		return fmt.Errorf("mysql is required")
-	}
 	if strings.TrimSpace(c.FrontendURL) == "" {
 		return fmt.Errorf("frontend.url is required")
 	}
@@ -297,4 +294,12 @@ func findProjectRoot() string {
 		}
 		dir = parent
 	}
+}
+
+// ValidateMySQL checks MySQL configuration after Vault KV / Secrets Manager / env filled it.
+func (c *Config) ValidateMySQL() error {
+	if strings.TrimSpace(c.MySQLDSN) == "" {
+		return fmt.Errorf("mysql configuration is required (MYSQL_* env or secrets backend)")
+	}
+	return nil
 }

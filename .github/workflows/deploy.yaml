@@ -1,0 +1,127 @@
+name: deploy production EC2
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - ".github/workflows/ci.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: mdg-auth-svc-prd
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Build and deploy directly on EC2
+    runs-on: ubuntu-latest
+    environment:
+      name: mitdo-cloud-auth-svc-prd
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate AWS deployment variables
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+          EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$AWS_REGION" || (echo "Missing GitHub environment variable: AWS_REGION" >&2; exit 1)
+          test -n "$AWS_ROLE_ARN" || (echo "Missing GitHub environment variable: AWS_ROLE_ARN" >&2; exit 1)
+          test -n "$EC2_INSTANCE_ID" || (echo "Missing GitHub environment variable: EC2_INSTANCE_ID" >&2; exit 1)
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: github-actions-auth-${{ github.run_id }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Deploy source and rebuild Docker image on EC2
+        env:
+          EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          PARAMETERS=$(python3 - <<'PY'
+          import json
+          import os
+
+          repository = os.environ["SOURCE_REPOSITORY"]
+          sha = os.environ["SOURCE_SHA"]
+          archive_url = f"https://api.github.com/repos/{repository}/tarball/{sha}"
+
+          commands = [
+              "set -euo pipefail",
+              f"echo 'Deploying mdg-auth-svc commit: {sha}'",
+              "echo 'Checking EC2 environment file: /etc/mdg-auth-svc.env'",
+              "if [ ! -f /etc/mdg-auth-svc.env ]; then echo 'ERROR: /etc/mdg-auth-svc.env does not exist on EC2' >&2; exit 1; fi",
+              "if [ ! -r /etc/mdg-auth-svc.env ]; then echo 'ERROR: /etc/mdg-auth-svc.env is not readable' >&2; exit 1; fi",
+              "chmod 600 /etc/mdg-auth-svc.env",
+              "command -v docker >/dev/null || (echo 'ERROR: Docker is not installed' >&2; exit 1)",
+              "command -v curl >/dev/null || (echo 'ERROR: curl is not installed' >&2; exit 1)",
+              "mkdir -p /var/lib/mdg-auth-svc/releases",
+              f"RELEASE_DIR=/var/lib/mdg-auth-svc/releases/{sha}",
+              "rm -rf \"$RELEASE_DIR\"",
+              "mkdir -p \"$RELEASE_DIR/source\"",
+              f"curl -fsSL '{archive_url}' -o \"$RELEASE_DIR/source.tar.gz\"",
+              "tar -xzf \"$RELEASE_DIR/source.tar.gz\" -C \"$RELEASE_DIR/source\" --strip-components=1",
+              f"docker build --tag mdg-auth-svc:{sha} --tag mdg-auth-svc:latest \"$RELEASE_DIR/source\"",
+              "docker rm -f mdg-auth-svc 2>/dev/null || true",
+              f"docker run -d --name mdg-auth-svc --restart unless-stopped -p 8080:8080 --env-file /etc/mdg-auth-svc.env -v /var/lib/mdg-auth-svc:/app/data mdg-auth-svc:{sha}",
+              "docker ps -a --filter name=^/mdg-auth-svc$ --format 'table {{.Names}}\\t{{.Status}}\\t{{.Image}}\\t{{.Ports}}'",
+              "docker inspect mdg-auth-svc --format 'container_id={{.Id}} image={{.Config.Image}} status={{.State.Status}} exit_code={{.State.ExitCode}} restart_count={{.RestartCount}}'",
+              "for i in $(seq 1 30); do echo \"Health check attempt $i/30\"; if curl -v -fsS http://127.0.0.1:8080/healthz; then echo 'Health check passed'; exit 0; fi; echo 'Health check failed; container logs:'; docker logs --tail 50 mdg-auth-svc 2>&1 || true; sleep 2; done",
+              "echo 'Health check timed out after 30 attempts' >&2",
+              "docker ps -a --filter name=^/mdg-auth-svc$",
+              "docker inspect mdg-auth-svc --format 'status={{.State.Status}} exit_code={{.State.ExitCode}} error={{.State.Error}} restart_count={{.RestartCount}}'",
+              "docker logs --tail 100 mdg-auth-svc 2>&1 || true",
+              "exit 1",
+          ]
+          print(json.dumps({"commands": commands}))
+          PY
+          )
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "Deploy mdg-auth-svc $SOURCE_SHA to EC2" \
+            --parameters "$PARAMETERS" \
+            --query 'Command.CommandId' \
+            --output text)
+
+          echo "SSM command ID: $COMMAND_ID"
+
+          WAIT_STATUS=0
+          aws ssm wait command-executed \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" || WAIT_STATUS=$?
+
+          COMMAND_STATUS=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --query 'Status' \
+            --output text)
+
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --query '{status:Status,status_details:StatusDetails,exit_code:ResponseCode,stdout:StandardOutputContent,stderr:StandardErrorContent}' \
+            --output json || true
+
+          echo "SSM command status: $COMMAND_STATUS"
+          echo "SSM wait status: $WAIT_STATUS"
+          test "$COMMAND_STATUS" = "Success" && test "$WAIT_STATUS" -eq 0

@@ -6,7 +6,7 @@ import (
 	"github.com/mitdo-garden/mdg-auth-svc/internal/config"
 )
 
-// LoadAppSecrets reads OAuth + session_secret from KV (v2) into cfg.
+// LoadAppSecrets reads OAuth, session_secret, and optional MySQL fields from KV (v2) into cfg.
 // Non-empty values already set (YAML / env) are left unchanged.
 func (c *Client) LoadAppSecrets(cfg *config.Config) error {
 	path := cfg.Vault.SecretsPath
