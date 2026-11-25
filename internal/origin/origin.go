@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-const publicDomain = "mitdo.tech"
-
 // Allowed accepts the configured frontend origin. In dev it also accepts
 // mitdo.tech (any port) and the same scheme and port on localhost or any IP.
 func Allowed(origin, frontendURL string, allowLAN bool) bool {
@@ -80,7 +78,8 @@ func RewriteCallback(configured, requestHost string) string {
 
 func onPublicDomain(host string) bool {
 	host = strings.Trim(strings.ToLower(host), "[]")
-	return host == publicDomain || strings.HasSuffix(host, "."+publicDomain)
+	return host == "mitdo.cloud" || strings.HasSuffix(host, ".mitdo.cloud") ||
+		host == "mitdo.tech" || strings.HasSuffix(host, ".mitdo.tech")
 }
 
 // Loopback reports whether origin is localhost or a loopback address.

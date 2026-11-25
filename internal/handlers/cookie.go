@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-const publicDomain = "mitdo.tech"
-
 // sessionCookieDomain keeps a configured Domain only when the request host
 // matches it. Requests on mitdo.tech always use that domain. A Domain=localhost
 // cookie is rejected by the browser for any other host, so those requests get
@@ -17,8 +15,11 @@ func sessionCookieDomain(configured, requestHost string) string {
 		host = h
 	}
 	host = strings.Trim(strings.ToLower(host), "[]")
-	if host == publicDomain || strings.HasSuffix(host, "."+publicDomain) {
-		return publicDomain
+	if host == "mitdo.cloud" || strings.HasSuffix(host, ".mitdo.cloud") {
+		return "mitdo.cloud"
+	}
+	if host == "mitdo.tech" || strings.HasSuffix(host, ".mitdo.tech") {
+		return "mitdo.tech"
 	}
 	configured = strings.TrimSpace(configured)
 	if configured == "" {
