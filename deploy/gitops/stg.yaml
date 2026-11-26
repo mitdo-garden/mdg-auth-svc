@@ -19,9 +19,7 @@ env:
   KMS_SECRETS_ID: mdg-auth/stg
   KMS_KEY_ID: alias/mdg-auth-jwt-stg
   FRONTEND_URL: https://app.stg.example
-  GOOGLE_CALLBACK_URL: https://api.stg.example/v1/auth/google/callback
-  GITHUB_CALLBACK_URL: https://api.stg.example/v1/auth/github/callback
+  GOOGLE_CALLBACK_URL: https://api.stg.example/auth/google/callback
+  GITHUB_CALLBACK_URL: https://api.stg.example/auth/github/callback
 routes:
-  - "ANY /.well-known/jwks.json"
-  - "ANY /v1/auth/{proxy+}"
-  - "ANY /v1/me"
+  - "ANY /auth/{proxy+}"

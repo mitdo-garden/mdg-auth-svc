@@ -13,10 +13,10 @@ mysql:
   database: ${MYSQL_DATABASE:mdg_auth_test}
 
 google:
-  callback_url: ${GOOGLE_CALLBACK_URL:http://localhost:5173/v1/auth/google/callback}
+  callback_url: ${GOOGLE_CALLBACK_URL:http://localhost:5173/auth/google/callback}
 
 github:
-  callback_url: ${GITHUB_CALLBACK_URL:http://localhost:5173/v1/auth/github/callback}
+  callback_url: ${GITHUB_CALLBACK_URL:http://localhost:5173/auth/github/callback}
 
 jwt:
   refresh_ttl_seconds: 3600

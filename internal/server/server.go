@@ -61,27 +61,22 @@ func New(cfg *config.Config, authHandler *handlers.AuthHandler, tokens *auth.Tok
 
 	requireAuth := middleware.Authenticate(tokens, cfg.CookieName)
 
-	app.Get("/", func(c fiber.Ctx) error {
-		return c.JSON(fiber.Map{"status": "ok", "service": "mdg-auth-svc"})
-	})
 	app.Get("/healthz", func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok", "service": "mdg-auth-svc"})
 	})
 
-	app.Get("/.well-known/jwks.json", authHandler.JWKS)
+	authAPI := app.Group("/auth")
+	authAPI.Get("/.well-known/jwks.json", authHandler.JWKS)
+	authAPI.Get("/me", requireAuth, authHandler.Me)
 
 	registerPublicAuth := func(r fiber.Router) {
-		r.Post("/auth/refresh", authHandler.Refresh)
-		r.Post("/auth/logout", authHandler.Logout)
-		r.Post("/auth/:provider/token", authHandler.ExchangeToken)
-		r.Get("/auth/:provider/callback", authHandler.Callback)
-		r.Get("/auth/:provider", authHandler.Begin)
+		r.Post("/refresh", authHandler.Refresh)
+		r.Post("/logout", authHandler.Logout)
+		r.Post("/:provider/token", authHandler.ExchangeToken)
+		r.Get("/:provider/callback", authHandler.Callback)
+		r.Get("/:provider", authHandler.Begin)
 	}
-	registerPublicAuth(app)
-	registerPublicAuth(app.Group("/v1"))
-
-	app.Get("/me", requireAuth, authHandler.Me)
-	app.Get("/v1/me", requireAuth, authHandler.Me)
+	registerPublicAuth(authAPI)
 
 	return app
 }

@@ -227,7 +227,7 @@ func (h *AuthHandler) setAccessCookie(c fiber.Ctx, jwt string) {
 }
 
 func (h *AuthHandler) setRefreshCookie(c fiber.Ctx, raw string) {
-	// Path=/ so SPA credentialed calls to /v1/auth/refresh and /v1/auth/logout send it.
+	// Path=/ so SPA credentialed calls to /auth/refresh and /auth/logout send it.
 	h.setCookie(c, h.cfg.RefreshCookieName, raw, int(h.cfg.RefreshTTL.Seconds()), "/")
 }
 

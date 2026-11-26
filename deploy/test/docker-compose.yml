@@ -91,8 +91,8 @@ services:
       VAULT_TRANSIT_KEY: jwt-access
 
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
-      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:5001/v1/auth/google/callback}
-      GITHUB_CALLBACK_URL: ${GITHUB_CALLBACK_URL:-http://localhost:5001/v1/auth/github/callback}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:5001/auth/google/callback}
+      GITHUB_CALLBACK_URL: ${GITHUB_CALLBACK_URL:-http://localhost:5001/auth/github/callback}
 
 volumes:
   mysql_data:

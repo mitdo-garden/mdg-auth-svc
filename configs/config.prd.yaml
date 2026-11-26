@@ -6,10 +6,10 @@ server:
   port: "${SERVER_PORT:8080}"
 
 google:
-  callback_url: ${GOOGLE_CALLBACK_URL:https://api.mitdo.cloud/v1/auth/google/callback}
+  callback_url: ${GOOGLE_CALLBACK_URL:https://api.mitdo.cloud/auth/google/callback}
 
 github:
-  callback_url: ${GITHUB_CALLBACK_URL:https://api.mitdo.cloud/v1/auth/github/callback}
+  callback_url: ${GITHUB_CALLBACK_URL:https://api.mitdo.cloud/auth/github/callback}
 
 jwt:
   access_ttl_seconds: 600
