@@ -10,7 +10,7 @@ mysql:
   port: "${MYSQL_PORT:3306}"
   params: "${MYSQL_PARAMS:parseTime=true&loc=UTC&tls=true}"
   user: ${MYSQL_USER:3Gkv9nJJJ1CuB2R.root}
-  password: "${MYSQL_PASSWORD:StLjClL3uRDdv7PF}"
+  password: "${MYSQL_PASSWORD:}"
 
 google:
   callback_url: ${GOOGLE_CALLBACK_URL:http://mitdo.tech:8080/v1/auth/google/callback}
